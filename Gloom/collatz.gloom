@@ -1,0 +1,5 @@
+cond import
+	
+collatzseq [ [ dup dup even? [ 2 / ] [ 3 * 1 + ] if dup 1 != ] loop ] !
+( collatz [ main debug.size >r $1 collatzseq main debug.size r> - dup >r debug.remove r> ] ! )
+collatz [ $1 collatzseq >r $1 [ $1 $2 1 r> + >r $1 != ] loop drop r> ] !

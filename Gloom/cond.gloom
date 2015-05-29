@@ -1,0 +1,19 @@
+true t !
+false f !
+even? [ 2 % 0 = ] !
+odd? [ 2 % 0 != ] !
+( the following are defined with the interpreter )
+( not [ f t if ] or [ t * 1 - ] ! )
+( and [ $1 $2 f if ] ! )
+( or [ $1 t $2 if ] ! )
+( < [ $1 $2 > ] ! )
+( = [ $2 $1 > not $1 $2 > not and ] ! )
+( != [ = not ] ! )
+( >= [ $2 $1 > t [ $2 $1 = ] if ] ! ( [ $1 $2 > not ] ! ) )
+( <= [ $1 $2 > t [ $2 $1 = ] if ] ! ( [ $2 $1 > not ] ! ) )
+( nand [ and not ] ! )
+( xor [ $1 $2 or $1 $2 nand and ] ! )
+( nor [ or not ] ! )
+( xnor [ xor not ] ! )
+( t -1 ! )
+( f 0 ! )

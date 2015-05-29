@@ -1,0 +1,5 @@
+keep [ $2 $1 eval $2 ] !
+2keep [ $3 $2 $1 eval $3 $2 ] !
+dip [ $1 eval $2 ] !
+2dip [ $1 eval $3 $2 ] !
+repeat [ rep ] !
