@@ -3,24 +3,29 @@ import java.io.*;
 import java.util.Scanner;
 
 abstract class TokenBase {
-	private String token;
-	private int needs;
+	private String token;		// I forget how this works
+	private int needs;			// How many arguments does the function need
 
 	public TokenBase(String token, int needs) {
 		this.token = token;
 		this.needs = needs;
 	}
 	
+	/*
+	*    PUBLIC HELPER FUNCTIONS
+	*/
+	
+	// Each token expects a certain number of elements to be present on the stack in order to be run
 	public void hasElements(Stack<String> stack) {
-		if (stack.size() < needs) {
+		if (stack.size() < needs)
 			throw new TokenError(String.format("Error in %s: Needs %d elements, Stack has %d", token, needs, stack.size()));
-		}
 	}
 	
+	// Converts the string to it's integer value
 	public static int toInt(String val) {
 		return Integer.parseInt(val);
 	}
-	
+
 	public String getToken() {
 		return token;
 	}
@@ -33,29 +38,32 @@ abstract class TokenBase {
 		return hasType(val, "reference");
 	}
 	
+	// Tests if the given value has the type
 	public static boolean hasType(String val, String type) {
 		try {
-		switch (type) {
-			case "bool":
-				return "-1".equals(val) || "0".equals(val);
-			case "list":
-				if (val.charAt(0) == '[') {
+			switch (type) {
+				case "bool":
+					return "-1".equals(val) || "0".equals(val);
+				
+				case "list":
+					if (val.charAt(0) == '[') return true;
+					
+				case "reference":
+					toInt(val.substring(1));
+					return val.charAt(0) == '&';
+				
+				case "int":
+					toInt(val);
 					return true;
-				}
-			case "reference":
-				toInt(val.substring(1));
-				return val.charAt(0) == '&';
-			case "int":
-				toInt(val);
-				return true;
-			default:
-				return true;
-		}
-		} catch (NumberFormatException e) {
+				
+				default:
+					return true;
+			}
+		} catch (NumberFormatException e)
 			return "string".equals(type);
-		}
 	}
 	
+	// Returns the type of the given value
 	public static String type(String val) {
 		try {
 			switch (val.charAt(0)) {
@@ -63,64 +71,76 @@ abstract class TokenBase {
 					toInt(val.substring(1));
 				case '[':
 					return "list";
+					
 				case '$':
 					return "string";
+					
 				default:
 					toInt(val);
 					return "int";
 			}
-		} catch (RuntimeException e) {
+		} catch (RuntimeException e)
 			return "string";
-		}
-	}
-	
-	void run(Interpreter gloom, Stack<String> main, Stack<String> retain) {
-		hasElements(main);
 	}
 	
 	public static HashMap<String, TokenBase> allTokens() {
 		HashMap<String, TokenBase> ret = new HashMap<>();
 		
-		for (Operation op : Operation.values()) {
+		for (Operation op : Operation.values())
 			ret.put(op.token, op.instruction);
-		}
 		
 		return ret;
 	}
 	
+	// Returns the internals of the given list (strips the brackets from the string)
 	public static String nList(String list) {
-		if (list.length() == 3) {
-			return "";
-		}
+		if (list.length() == 3) return "";
 		
 		return list.substring(2, list.length() - 2);
 	}
 	
+	// ???
 	public static String removeDelay(String str) {
 		return str.charAt(0) == ':' ? str.substring(1) : str;
 	}
 	
+	// Returns the string referenced by the given token (iff it is a reference)
 	public static String deref(Interpreter gloom, String token) {
 		return isReference(token) ? gloom.getReference(token) : token;
 	}
 	
+	// Concatenates the list of strings into a single string
 	public static String concat(String[] list) {
 		String sum = "";
-		for (String token : list) {
+		
+		for (String token : list)
 			sum = sum + " " + token;
-		}
+			
+		return sum.substring(1);	// ???
+		//return concat(list, 0, list.length);
+	}
+
+	// Concatenates the range
+	public static String concat(String[] list, int begin, int end) {
+		String sum = "";
+		
+		for (int i = begin; i < end; ++i) {
+			sum = sum + " " + list[i];
+			
 		return sum.substring(1);
 	}
 	
-	public static String concat(String[] list, int begin, int end) {
-		String sum = "";
-		for (int i = begin; i < end; ++i) {
-			sum = sum + " " + list[i];
-		}
-		return sum.substring(1);
+	/*
+	*   POLYMORPHISM
+	*/
+	
+	// Each token class defines this method which is called to perform all behavior
+	void run(Interpreter gloom, Stack<String> main, Stack<String> retain) {
+		hasElements(main);
 	}
 }
 
+// Token error class
 class TokenError extends RuntimeException {
 	String errorMsg;
 	
@@ -133,41 +153,46 @@ class TokenError extends RuntimeException {
 	}
 }
 
+// This class forces the interpreter to evaluate the last parsed gloom code
 class Evaluate extends TokenBase {
 	public Evaluate(String token, int needs) {
 		super(token, needs);
 	}
 	
+	// Counts the number of "named arguments" that the function has
 	protected int countArgs(String func) {
 		int i = 1;
 		
-		while (func.contains("$" + i)) {
-			++i;
-		}
+		while (func.contains("$" + i)) ++i;
 		
 		return i;
 	}
 	
+	// Evaluates the function
 	void run(Interpreter gloom, Stack<String> main, Stack<String> retain) {
 		super.run(gloom, main, retain);
 		
 		String toEval = deref(gloom, main.pop());
 		
-		if ("list".equals(type(toEval))) {
+		if ("list".equals(type(toEval)))
 			toEval = nList(toEval);
-		}
 		
-		int nArgs = countArgs(toEval);
+		int nArgs = countArgs(toEval);							// Note: Evaluate will throw a "stack empty" error if it doesn't have enough arguments
 		
 		for (int i = 1; i < nArgs; ++i) {
-			toEval = toEval.replace("$" + i, main.top());
-			main.pop();
+			toEval = toEval.replace("$" + i, main.top());		// Replaces arguments in text with values from the stack.
+			main.pop();											// Note: main.top is called each time that "$"+i is replaced (I think)
 		}
 		
 		gloom.execute(toEval);
 	}
 }
 
+/*
+*  List Operation Tokens
+*/
+
+// Calculates the size of a list
 class Size extends TokenBase {
 	public Size(String token, int needs) {
 		super(token, needs);
@@ -176,14 +201,14 @@ class Size extends TokenBase {
 	void run(Interpreter gloom, Stack<String> main, Stack<String> retain) {
 		super.run(gloom, main, retain);
 		
-		if (hasType(main.top(), "list")) {
+		if (hasType(main.top(), "list"))
 			main.push("" + (deref(gloom, main.pop()).split(" ").length - 2));
-		} else {
+		else
 			main.push(String.format("Error in %s: Not defined for value %s of type %s", getToken(), main.top(), type(main.pop())));
-		}
 	}
 }
 
+// Returns an element in a list
 class Get extends TokenBase {
 	public Get(String token, int needs) {
 		super(token, needs);
@@ -192,14 +217,14 @@ class Get extends TokenBase {
 	void run(Interpreter gloom, Stack<String> main, Stack<String> retain) {
 		super.run(gloom, main, retain);
 		
-		if (hasType(main.top(), "list")) {
+		if (hasType(main.top(), "list"))
 			main.push(deref(gloom, main.pop()).split(" ")[toInt(main.pop()) + 1]);
-		} else {
+		else
 			main.push(String.format("Error in %s: Not defined for value %s of type %s", getToken(), main.top(), type(main.pop())));
-		}
 	}
 }
 
+// Replaces an element in a list
 class Set extends TokenBase {
 	public Set(String token, int needs) {
 		super(token, needs);
@@ -216,17 +241,17 @@ class Set extends TokenBase {
 			String[] sett = deref(gloom, ref).split(" ");
 			sett[toInt(main.pop()) + 1] = main.pop();
 			
-			if (isRef) {
+			if (isRef)
 				gloom.setReference(ref, concat(sett));
-			} else {
+			else
 				main.push(concat(sett));
-			}
-		} else {
+				
+		} else
 			main.push(String.format("Error in %s: Not defined for value %s of type %s", getToken(), main.top(), type(main.pop())));
-		}
 	}
 }
 
+// Removes an element from a list
 class Remove extends TokenBase {
 	public Remove(String token, int needs) {
 		super(token, needs);
@@ -242,9 +267,8 @@ class Remove extends TokenBase {
 			String[] sett = deref(gloom, ref).split(" ");
 			int spot = toInt(main.pop()) + 1;
 			
-			if (isRef) {
+			if (isRef)
 				gloom.setReference(ref, concat(sett, 0, spot) + " " + concat(sett, spot + 1, sett.length));
-			}
 			
 			main.push(sett[spot]);
 		} else {
@@ -253,6 +277,7 @@ class Remove extends TokenBase {
 	}
 }
 
+// Inserts an element into a list
 class Insert extends TokenBase {
 	public Insert(String token, int needs) {
 		super(token, needs);
@@ -268,17 +293,17 @@ class Insert extends TokenBase {
 			String[] sett = deref(gloom, ref).split(" ");
 			int spot = toInt(main.pop()) + 1;
 			
-			if (isRef) {
+			if (isRef)
 				gloom.setReference(ref, concat(sett, 0, spot) + " " + main.pop() + " " + concat(sett, spot, sett.length));
-			} else {
+			else
 				main.push(concat(sett, 0, spot) + " " + main.pop() + " " + concat(sett, spot, sett.length));
-			}
-		} else {
+			
+		} else
 			main.push(String.format("Error in %s: Not defined for value %s of type %s", getToken(), main.top(), type(main.pop())));
-		}
 	}
 }
 
+// Appends two lists together
 class Append extends TokenBase {
 	public Append(String token, int needs) {
 		super(token, needs);
@@ -289,6 +314,7 @@ class Append extends TokenBase {
 		
 		if (hasType(main.top(), "list")) {
 			String[] list1 = deref(gloom, main.pop()).split(" ");
+			
 			if (hasType(main.top(), "list")) {
 				String[] list2 = deref(gloom, main.pop()).split(" ");
 				main.push(gloom.newReference(concat(list2, 0, list2.length - 1) + " " + concat(list1, 1, list1.length)));
@@ -300,6 +326,7 @@ class Append extends TokenBase {
 	}
 }
 
+// Copies the elements in a list
 class Copy extends TokenBase {
 	public Copy(String token, int needs) {
 		super(token, needs);
@@ -308,15 +335,18 @@ class Copy extends TokenBase {
 	void run(Interpreter gloom, Stack<String> main, Stack<String> retain) {
 		super.run(gloom, main, retain);
 		
-		if (hasType(main.top(), "list")) {
+		if (hasType(main.top(), "list"))
 			main.push(gloom.newReference(deref(gloom, main.pop())));
-		} else {
+		else
 			main.push(String.format("Error in %s: Not defined for value %s of type %s", getToken(), main.top(), type(main.pop())));
-		}
 	}
 }
 
-// Functions & Variables
+/*
+* Variables and functions
+*/
+
+// Defines a new variable
 class Def extends TokenBase {
 	public Def(String token, int needs) {
 		super(token, needs);
@@ -324,24 +354,26 @@ class Def extends TokenBase {
 	
 	protected int countArgs(String func) {
 		int i = 0;
-		do {
+		
+		do
 			++i;
-		} while (func.contains("$" + i));
+		while (func.contains("$" + i));
+		
 		return i;
 	}
 	
 	void run(Interpreter gloom, Stack<String> main, Stack<String> retain) {
 		super.run(gloom, main, retain);
 		
-		String body = deref(gloom, main.pop());
-		String names = deref(gloom, main.pop());
+		String body = deref(gloom, main.pop());							// When assigning a single variable, the lists can be dropped, however, that may result in problems
+		String names = deref(gloom, main.pop());						// If the variable was previously defined. Moreover, multiple variables can be assigned if they are within a list
 		
-		for (String name : names.split(" ")) {
+		for (String name : names.split(" "))
 			gloom.addVariable(new Variable(body, removeDelay(name), countArgs(body) - 1));
-		}
 	}
 }
 
+// Represents a variable
 class Variable extends TokenBase {
 	private String body;
 	
@@ -353,11 +385,15 @@ class Variable extends TokenBase {
 	void run(Interpreter gloom, Stack<String> main, Stack<String> retain) {
 		super.run(gloom, main, retain);
 		
-		gloom.execute(body + " eval");
+		gloom.execute(body + " eval");					// If the variable is a function, then the function is run
 	}
 }
 
-// Control Flow
+/*
+*  Control Flow
+*/
+
+// Runs a basic loop structure
 class Loop extends TokenBase {
 	public Loop(String token, int needs) {
 		super(token, needs);
@@ -368,17 +404,17 @@ class Loop extends TokenBase {
 		
 		String body = main.pop();
 		
-		do {
+		do
 			gloom.execute(body + " eval");
-		} while (main.pop().equals("-1"));
+		while (main.pop().equals("-1"));
 	}
 }
 
+// Performs a basic if-then-else structure
 class If extends TokenBase {
 	public If(String token, int needs) {
 		super(token, needs);
 	}
-	
 	
 	void run(Interpreter gloom, Stack<String> main, Stack<String> retain) {
 		super.run(gloom, main, retain);
@@ -401,14 +437,19 @@ class If extends TokenBase {
 	}
 }
 
-// Math classes
+/*
+*  Math library
+*/
+
+// This defines a further abstract class to define binary mathematical operators
+// This class removes the process of testing type correctness from children classes
 abstract class Math extends TokenBase {
 	public Math(String token, int needs) {
 		super(token, needs);
 	}
 	
 	abstract String op(String left, String right);
-	abstract boolean definedFor(String type, boolean lhs);
+	abstract boolean definedFor(String type, boolean lhs);						
 	
 	void run(Interpreter gloom, Stack<String> main, Stack<String> retain) {
 		super.run(gloom, main, retain);
@@ -419,7 +460,6 @@ abstract class Math extends TokenBase {
 			if (definedFor(type(main.top()), false)) {
 				main.push(op(main.pop(), right));
 				return;
-				
 			}
 		}
 		
@@ -427,6 +467,7 @@ abstract class Math extends TokenBase {
 	}
 }
 
+// Mathematical '+' operator
 class Add extends Math {
 	public Add(String token, int needs) {
 		super(token, needs);
@@ -442,6 +483,7 @@ class Add extends Math {
 	
 }
 
+// Mathematical '-' operator
 class Sub extends Math {
 	public Sub(String token, int needs) {
 		super(token, needs);
@@ -456,6 +498,7 @@ class Sub extends Math {
 	}
 }
 
+// Mathematical '*' operator
 class Mult extends Math {
 	public Mult(String token, int needs) {
 		super(token, needs);
@@ -470,6 +513,7 @@ class Mult extends Math {
 	}
 }
 
+// Mathematical '/' operator
 class Div extends Math {
 	public Div(String token, int needs) {
 		super(token, needs);
@@ -484,6 +528,7 @@ class Div extends Math {
 	}
 }
 
+// Mathematical '%' operator
 class Mod extends Math {
 	public Mod(String token, int needs) {
 		super(token, needs);
@@ -492,7 +537,7 @@ class Mod extends Math {
 	String op(String left, String right) {
 		int rhs = toInt(right);
 		
-		return "" + (((toInt(left) % rhs) + rhs) % rhs);
+		return "" + (((toInt(left) % rhs) + rhs) % rhs);		// Note that this is a mathematical mod operation
 	}
 	
 	boolean definedFor(String type, boolean lhs) {
@@ -500,13 +545,17 @@ class Mod extends Math {
 	}
 }
 
-// Comparison classes
+/*
+*  Ordinal Operations
+*/
+
 abstract class Compare extends TokenBase {
 	public Compare(String token, int needs) {
 		super(token, needs);
 	}
 }
 
+// All comparison operations in gloom are defined in terms of '>'
 class Greater extends TokenBase /* Compare */ {
 	public Greater(String token, int needs) {
 		super(token, needs);
@@ -519,7 +568,11 @@ class Greater extends TokenBase /* Compare */ {
 	}
 }
 
-// Retainer stack interaction classes
+/*
+*  Stack interaction classes
+*/
+
+// Moves an element from the main stack to the retain stack
 class ToRetain extends TokenBase {
 	public ToRetain(String token, int needs) {
 		super(token, needs);
@@ -532,6 +585,7 @@ class ToRetain extends TokenBase {
 	}
 }
 
+// Moves an element from the retain stack to the main stack
 class ToMain extends TokenBase {
 	public ToMain(String token, int needs) {
 		super(token, needs);
@@ -544,23 +598,11 @@ class ToMain extends TokenBase {
 	}
 }
 
-// Other Implementation Classes
-class Rep extends TokenBase {
-	public Rep(String token, int needs) {
-		super(token, needs);
-	}
-	
-	void run(Interpreter gloom, Stack<String> main, Stack<String> retain) {
-		int n = toInt(main.pop());
-		String body = main.pop();
-		
-		for (int i = 0; i < n; ++i) {
-			gloom.execute(body + " eval");
-		}
-	}
-}
+/*
+*  Type Checking
+*/
 
-// Type info classes
+// Returns an elements type
 class Type extends TokenBase {
 	public Type(String token, int needs) {
 		super(token, needs);
@@ -573,6 +615,7 @@ class Type extends TokenBase {
 	}
 }
 
+// Checks if an element is of a certain type
 class TypeCheck extends TokenBase {
 	String predicate;
 	
@@ -580,6 +623,7 @@ class TypeCheck extends TokenBase {
 		switch (token) {
 			case "ref":
 				return "reference";
+				
 			default:
 				return token;
 		}
@@ -587,7 +631,7 @@ class TypeCheck extends TokenBase {
 
 	public TypeCheck(String token, int needs) {
 		super(token, needs);
-		predicate = name(token.substring(0, token.length() - 1));			// type check operator assumes token is type + "?"
+		predicate = name(token.substring(0, token.length() - 1));			// type check operator assumes token name is type + "?"
 	}
 	
 	void run(Interpreter gloom, Stack<String> main, Stack<String> retain) {
@@ -597,6 +641,26 @@ class TypeCheck extends TokenBase {
 	}
 }
 
+/*
+*  Other
+*/
+
+// Replicates a given instruction x times. More efficient in certain cases than the standard loop construct
+class Rep extends TokenBase {
+	public Rep(String token, int needs) {
+		super(token, needs);
+	}
+	
+	void run(Interpreter gloom, Stack<String> main, Stack<String> retain) {
+		int n = toInt(main.pop());
+		String body = main.pop();
+		
+		for (int i = 0; i < n; ++i)
+			gloom.execute(body + " eval");
+	}
+}
+
+// Imports a file into gloom. Has the capacity to import gloom and java files (but currently does not have the ability)
 class Import extends TokenBase {
 	public Import(String token, int needs) {
 		super(token, needs);
@@ -604,16 +668,17 @@ class Import extends TokenBase {
 	
 	void run(Interpreter gloom, Stack<String> main, Stack<String> retain) {
 		super.run(gloom, main, retain);
-		
 		String filename = main.pop();
-		try {
+		
+		try
 			gloom.loadFile(filename);
-		} catch (FileNotFoundException e) {
+		
+		catch (FileNotFoundException e)
 			throw new TokenError(String.format("Error in %s: File % not found", getToken(), filename));
-		}
 	}
 }
 
+// Debug Library
 class DebugOp extends TokenBase {
 	private String operation;
 	
@@ -628,23 +693,21 @@ class DebugOp extends TokenBase {
 		switch(operation) {
 			case "size":
 				String stack = main.pop();
-				if ("main".equals(stack)) {
+				
+				if ("main".equals(stack))
 					main.push("" + main.size());
-				} else {
+				else
 					main.push("" + retain.size());
-				}
+				
 				break;
 			case "remove":
 				int n = toInt(main.pop());
 				
-				if (n < 0) {
-					throw new TokenError("You can't remove what's not there!");
-				}
-				
-				while (n-- > 0) {
-					main.pop();
-				}
+				if (n < 0) throw new TokenError("You can't remove what's not there!");
+				while (n-- > 0) main.pop();
+			
 				break;
+				
 			default:
 				break;
 		}
@@ -666,7 +729,7 @@ enum Operation {
 	LOOP(new Loop("loop", 1)),
 	IF(new If("if", 3)),
 	
-	// Variable Creators
+	// Variables
 	//LET(new Let("!!", 2)),
 	DEFINE(new Def("!", 2)),
 	EVAL(new Evaluate("eval", 1)),
@@ -687,7 +750,7 @@ enum Operation {
 	DUP(new Variable("[ $1 $1 ]", "dup", 1)),
 	OVER(new Variable("[ $2 $1 $2 ]", "over", 2)),
 	SWAP(new Variable("[ $1 $2 ]", "swap", 2)),
-	DROP(new Variable("[ [ @ ] $1 ! ]", "drop", 1)),
+	DROP(new Variable("[ [ @ ] $1 ! ]", "drop", 1)),					// Stores the element at the top of the stack in the '@' variable implicitly removing it from the stack
 	RETAIN(new ToRetain(">r", 1)),
 	USE(new ToMain("r>", 1)),
 	
